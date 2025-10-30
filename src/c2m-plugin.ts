@@ -255,24 +255,16 @@ const displayPoint = (chart: Chart) => {
         return;
     }
     const {c2m: ref, visible_groups} = chartStates.get(chart) as ChartStatesTypes;
-    const {point, index} = ref.getCurrent();
+    const {index} = ref.getCurrent();
     try{
+        // Use Chart2Music's index directly to highlight corresponding Chart.js points
         const highlightElements = [];
-        if("custom" in point){
+        visible_groups.forEach((datasetIndex: number) => {
             highlightElements.push({
-                // @ts-ignore
-                datasetIndex: point.custom.group,
-                // @ts-ignore
-                index: point.custom.index
-            });
-        }else{
-            visible_groups.forEach((datasetIndex: number) => {
-                highlightElements.push({
-                    datasetIndex,
-                    index
-                })
+                datasetIndex,
+                index
             })
-        }
+        })
         chart?.setActiveElements(highlightElements);
         chart?.tooltip?.setActiveElements(highlightElements, {})
         chart?.update();
@@ -355,22 +347,14 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         if(isNaN(c2mOptions.data[0])){
             c2mOptions.data = c2mOptions.data.map((point, index) => {
                 return {
-                    ...point,
-                    custom: {
-                        group: 0,
-                        index
-                    }
+                    ...point
                 }
             })
         }else{
             c2mOptions.data = c2mOptions.data.map((num, index) => {
                 return {
                     x: index,
-                    y: num,
-                    custom: {
-                        group: 0,
-                        index
-                    }
+                    y: num
                 }
             })
         }
@@ -381,21 +365,13 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
                 c2mOptions.data[groupName] = c2mOptions.data[groupName].map((num: number, index: number) => {
                     return {
                         x: index,
-                        y: num,
-                        custom: {
-                            group: groupNumber,
-                            index
-                        }
+                        y: num
                     }
                 })
             }else{
                 c2mOptions.data[groupName] = c2mOptions.data[groupName].map((point: any, index: number) => {
                     return {
-                        ...point,
-                        custom: {
-                            group: groupNumber,
-                            index
-                        }
+                        ...point
                     }
                 })
             }
@@ -437,7 +413,7 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
 
     chartStates.set(chart, {
         c2m,
-        visible_groups: groups?.map((g, i) => i) ?? [],
+        visible_groups: groups?.map((g, i) => i) ?? [0], // Default to [0] for single dataset charts
         lastDataSnapshot: createDataSnapshot(chart)
     });
 
@@ -522,8 +498,12 @@ const plugin: Plugin = {
             return; // No data changes
         }
 
-        // Check if this is a pure append scenario
+        // TODO: Re-enable append optimization once Chart2Music fixes appendData to update axis valueLabels
+        // Issue: appendData() doesn't update _xAxis.valueLabels, causing keyboard navigation to miss labels for appended points
+        // Detection code preserved for future use:
         const appendInfo = detectAppendScenario(chart, lastDataSnapshot);
+
+        //const appendInfo = null; // Temporarily disabled
 
         if(appendInfo){
             // Optimized path: use appendData() for streaming
@@ -540,17 +520,22 @@ const plugin: Plugin = {
 
                 const pointIndex = oldLength + idx;
 
+                // Get the corresponding label from chart.data.labels if it exists
+                const pointLabel = chart.data.labels?.[pointIndex];
+
                 // Format according to Chart2Music's SimpleDataPoint interface
                 let processedPoint: any;
                 if(typeof newPoint === 'number'){
                     processedPoint = {
                         x: pointIndex,
-                        y: newPoint
+                        y: newPoint,
+                        ...(pointLabel ? { label: String(pointLabel) } : {})
                     };
                 } else if(typeof newPoint === 'object' && newPoint !== null){
                     processedPoint = {
                         x: ('x' in newPoint && typeof newPoint.x === 'number') ? newPoint.x : pointIndex,
                         y: ('y' in newPoint) ? newPoint.y : newPoint,
+                        ...(pointLabel ? { label: String(pointLabel) } : {})
                     };
                 } else {
                     processedPoint = newPoint;
@@ -627,55 +612,31 @@ const plugin: Plugin = {
 
         let processedData = scrub?.data ?? data;
 
-        // Add custom metadata for visual sync
+        // Keep data in native Chart2Music format without custom metadata
         if(Array.isArray(processedData)){
-            if(isNaN(processedData[0])){
-                processedData = processedData.map((point, index) => {
-                    return {
-                        ...point,
-                        custom: {
-                            group: 0,
-                            index
-                        }
-                    }
-                })
-            }else{
+            if(!isNaN(processedData[0])){
+                // Convert simple numbers to x/y format
                 processedData = processedData.map((num, index) => {
                     return {
                         x: index,
-                        y: num,
-                        custom: {
-                            group: 0,
-                            index
-                        }
+                        y: num
                     }
                 })
             }
+            // Already in correct format if isNaN(processedData[0])
         }else{
+            // Handle grouped data
             const dataGroups = Object.keys(processedData);
-            dataGroups.forEach((groupName, groupNumber) => {
+            dataGroups.forEach((groupName) => {
                 if(!isNaN(processedData[groupName][0])){
                     processedData[groupName] = processedData[groupName].map((num: number, index: number) => {
                         return {
                             x: index,
-                            y: num,
-                            custom: {
-                                group: groupNumber,
-                                index
-                            }
-                        }
-                    })
-                }else{
-                    processedData[groupName] = processedData[groupName].map((point: any, index: number) => {
-                        return {
-                            ...point,
-                            custom: {
-                                group: groupNumber,
-                                index
-                            }
+                            y: num
                         }
                     })
                 }
+                // Already in correct format if isNaN
             });
         }
 
