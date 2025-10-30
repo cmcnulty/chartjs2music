@@ -481,7 +481,13 @@ const plugin: Plugin = {
     },
 
     afterUpdate: (chart: Chart, args, options) => {
+        // If chart wasn't initialized (e.g., started empty), try to initialize now
         if(!chartStates.has(chart)){
+            // Check if chart now has data
+            if(chart.data.datasets.length > 0 && chart.data.datasets[0].data.length > 0){
+                generateChart(chart, options);
+            }
+            // Whether we initialized or not, we're done for this update
             return;
         }
 
