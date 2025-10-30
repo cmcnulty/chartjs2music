@@ -24,12 +24,14 @@ import scatter from "./scatter";
 import grouped_scatter from "./grouped_scatter";
 import empty from "./empty";
 import memoryChart from "./memoryChart";
+import dynamic_updates from "./dynamic_updates";
+import streaming_append from "./streaming_append";
 
 export default {
     simple_bar,
     spanish_bar,
     log,
-    grouped_bar, 
+    grouped_bar,
     grouped_line,
     floating_bar,
     stacked_bar,
@@ -39,6 +41,8 @@ export default {
     string_x_minimum,
     string_x_values,
     memoryChart,
+    dynamic_updates,
+    streaming_append,
     box_plot,
     box_plot_numbers,
     box_plot_group,

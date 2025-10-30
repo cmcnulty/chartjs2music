@@ -5,6 +5,7 @@ import {processBoxData} from "./boxplots";
 type ChartStatesTypes = {
     c2m: c2m;
     visible_groups: number[];
+    lastDataSnapshot: string;
 }
 
 const chartStates = new Map<Chart, ChartStatesTypes>();
@@ -142,7 +143,7 @@ const processData = (data: any, c2m_types: string) => {
     data.datasets.forEach((obj: any, index: number) => {
         const groupName = obj.label ?? `Group ${index+1}`;
         groups.push(groupName);
-        
+
         result[groupName] = whichDataStructure(obj.data);
     });
 
@@ -167,6 +168,86 @@ const determineCCElement = (canvas: HTMLCanvasElement, provided: HTMLElement | n
     const cc = document.createElement("div");
     canvas.insertAdjacentElement("afterend", cc);
     return cc;
+}
+
+const createDataSnapshot = (chart: Chart) => {
+    return JSON.stringify({
+        datasets: chart.data.datasets.map(ds => ({
+            data: ds.data,
+            label: ds.label
+        })),
+        labels: chart.data.labels
+    });
+}
+
+const detectAppendScenario = (chart: Chart, lastSnapshot: string) => {
+    try {
+        const oldData = JSON.parse(lastSnapshot);
+        const newData = {
+            datasets: chart.data.datasets.map(ds => ({
+                data: ds.data,
+                label: ds.label
+            })),
+            labels: chart.data.labels
+        };
+
+        // Check if same number of datasets
+        if(oldData.datasets.length !== newData.datasets.length){
+            return null; // Not a simple append
+        }
+
+        // Check if only one dataset changed
+        const changedDatasets: number[] = [];
+        for(let i = 0; i < oldData.datasets.length; i++){
+            if(oldData.datasets[i].data.length !== newData.datasets[i].data.length){
+                changedDatasets.push(i);
+            }
+        }
+
+        // Only handle single dataset append for now
+        if(changedDatasets.length !== 1){
+            return null; // Multiple datasets changed or no change
+        }
+
+        const datasetIndex = changedDatasets[0];
+        const oldDataset = oldData.datasets[datasetIndex];
+        const newDataset = newData.datasets[datasetIndex];
+
+        // Check if new data is longer (append, not replace)
+        if(newDataset.data.length <= oldDataset.data.length){
+            return null; // Not an append
+        }
+
+        // Check if old data is unchanged (pure append)
+        const oldLength = oldDataset.data.length;
+        const oldDataStr = JSON.stringify(oldDataset.data.slice(0, oldLength));
+        const newDataStr = JSON.stringify(newDataset.data.slice(0, oldLength));
+
+        if(oldDataStr !== newDataStr){
+            return null; // Old data changed, not a pure append
+        }
+
+        // Check if labels also appended
+        const labelsAppended = (newData.labels?.length ?? 0) > (oldData.labels?.length ?? 0);
+        if(labelsAppended){
+            const oldLabelLen = oldData.labels?.length ?? 0;
+            const oldLabelsStr = JSON.stringify(oldData.labels?.slice(0, oldLabelLen) ?? []);
+            const newLabelsStr = JSON.stringify(newData.labels?.slice(0, oldLabelLen) ?? []);
+            if(oldLabelsStr !== newLabelsStr){
+                return null; // Old labels changed
+            }
+        }
+
+        // This is a pure append scenario!
+        return {
+            datasetIndex,
+            newPoints: newDataset.data.slice(oldLength),
+            categoryName: newDataset.label,
+            oldLength
+        };
+    } catch(e){
+        return null; // Error parsing, fall back to setData
+    }
 }
 
 const displayPoint = (chart: Chart) => {
@@ -235,7 +316,7 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
     if(scrub?.labels && scrub?.labels?.length > 0){   // Something was scrubbed
         if(!chart.data.labels || chart.data.labels.length === 0){
             axes.x.valueLabels = scrub.labels.slice(0);
-        }    
+        }
     }
 
     if(c2m_types === "scatter"){
@@ -356,7 +437,8 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
 
     chartStates.set(chart, {
         c2m,
-        visible_groups: groups?.map((g, i) => i) ?? []
+        visible_groups: groups?.map((g, i) => i) ?? [],
+        lastDataSnapshot: createDataSnapshot(chart)
     });
 
 }
@@ -419,6 +501,197 @@ const plugin: Plugin = {
             visible_groups.push(args.index);
             if(err){console.error(err)}
             return;
+        }
+    },
+
+    afterUpdate: (chart: Chart, args, options) => {
+        if(!chartStates.has(chart)){
+            return;
+        }
+
+        const state = chartStates.get(chart) as ChartStatesTypes;
+        const {c2m: ref, lastDataSnapshot} = state;
+
+        if(!ref){
+            return;
+        }
+
+        // Check if data has changed
+        const currentSnapshot = createDataSnapshot(chart);
+        if(currentSnapshot === lastDataSnapshot){
+            return; // No data changes
+        }
+
+        // Check if this is a pure append scenario
+        const appendInfo = detectAppendScenario(chart, lastDataSnapshot);
+
+        if(appendInfo){
+            // Optimized path: use appendData() for streaming
+            const {newPoints, categoryName, datasetIndex, oldLength} = appendInfo;
+
+            // Determine if this is a grouped chart
+            const isGrouped = chart.data.datasets.length > 1;
+            const targetCategory = isGrouped ? categoryName : undefined;
+
+            // Process each new point and append it
+            let appendFailed = false;
+            newPoints.forEach((newPoint, idx) => {
+                if(appendFailed) return;
+
+                const pointIndex = oldLength + idx;
+
+                // Format according to Chart2Music's SimpleDataPoint interface
+                let processedPoint: any;
+                if(typeof newPoint === 'number'){
+                    processedPoint = {
+                        x: pointIndex,
+                        y: newPoint
+                    };
+                } else if(typeof newPoint === 'object' && newPoint !== null){
+                    processedPoint = {
+                        x: ('x' in newPoint && typeof newPoint.x === 'number') ? newPoint.x : pointIndex,
+                        y: ('y' in newPoint) ? newPoint.y : newPoint,
+                    };
+                } else {
+                    processedPoint = newPoint;
+                }
+
+                // Use appendData for efficient streaming
+                const {err} = ref.appendData(processedPoint, targetCategory);
+
+                if(err){
+                    console.error(`[Chart2Music] appendData failed:`, err);
+                    // @ts-ignore
+                    options.errorCallback?.(err);
+                    appendFailed = true;
+                }
+            });
+
+            if(appendFailed){
+                // Fall back to full setData update
+                state.lastDataSnapshot = lastDataSnapshot; // Reset to trigger full update below
+            } else {
+                // Update snapshot after successful append
+                state.lastDataSnapshot = currentSnapshot;
+                return;
+            }
+        }
+
+        // Data has changed - use setData() for all updates
+        const {valid, c2m_types} = processChartType(chart);
+        if(!valid){
+            return;
+        }
+
+        let axes = generateAxes(chart);
+
+        if(chart.config.type === "wordCloud"){
+            delete axes.x.minimum;
+            delete axes.x.maximum;
+            delete axes.y.minimum;
+            delete axes.y.maximum;
+
+            if(!axes.x.label){
+                axes.x.label = "Word";
+            }
+            if(!axes.y.label){
+                axes.y.label = "Emphasis";
+            }
+        }
+
+        const {data, groups} = processData(chart.data, c2m_types);
+
+        let scrub = scrubX(data);
+        if(scrub?.labels && scrub?.labels?.length > 0){
+            if(!chart.data.labels || chart.data.labels.length === 0){
+                axes.x.valueLabels = scrub.labels.slice(0);
+            }
+        }
+
+        if(c2m_types === "scatter"){
+            delete scrub?.data;
+            delete axes.x.valueLabels;
+        }
+
+        axes = {
+            ...axes,
+            x: {
+                ...axes.x,
+                ...(options.axes?.x)
+            },
+            y: {
+                ...axes.y,
+                ...(options.axes?.y)
+            },
+        };
+
+        let processedData = scrub?.data ?? data;
+
+        // Add custom metadata for visual sync
+        if(Array.isArray(processedData)){
+            if(isNaN(processedData[0])){
+                processedData = processedData.map((point, index) => {
+                    return {
+                        ...point,
+                        custom: {
+                            group: 0,
+                            index
+                        }
+                    }
+                })
+            }else{
+                processedData = processedData.map((num, index) => {
+                    return {
+                        x: index,
+                        y: num,
+                        custom: {
+                            group: 0,
+                            index
+                        }
+                    }
+                })
+            }
+        }else{
+            const dataGroups = Object.keys(processedData);
+            dataGroups.forEach((groupName, groupNumber) => {
+                if(!isNaN(processedData[groupName][0])){
+                    processedData[groupName] = processedData[groupName].map((num: number, index: number) => {
+                        return {
+                            x: index,
+                            y: num,
+                            custom: {
+                                group: groupNumber,
+                                index
+                            }
+                        }
+                    })
+                }else{
+                    processedData[groupName] = processedData[groupName].map((point: any, index: number) => {
+                        return {
+                            ...point,
+                            custom: {
+                                group: groupNumber,
+                                index
+                            }
+                        }
+                    })
+                }
+            });
+        }
+
+        // Preserve user's current position if possible
+        const current = ref.getCurrent();
+        const pointIndex = current?.index;
+
+        // Call Chart2Music's setData method (returns void, doesn't report errors)
+        ref.setData(processedData, axes, pointIndex);
+
+        // Update the snapshot after successful update
+        state.lastDataSnapshot = currentSnapshot;
+
+        // Update visible groups if groups changed
+        if(groups){
+            state.visible_groups = groups.map((g, i) => i);
         }
     },
 
