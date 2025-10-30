@@ -390,8 +390,18 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         c2mOptions.audioEngine = options.audioEngine;
     }
 
-    if(c2mOptions.data.length === 0){
-        return;
+    // Check if data is empty (for both arrays and objects with groups)
+    if(Array.isArray(c2mOptions.data)){
+        if(c2mOptions.data.length === 0){
+            return;
+        }
+    }else{
+        // For grouped data (multiple datasets), check if all groups are empty
+        const groups = Object.keys(c2mOptions.data);
+        const hasData = groups.some(group => c2mOptions.data[group].length > 0);
+        if(!hasData){
+            return;
+        }
     }
 
     if(options.lang){
