@@ -180,75 +180,6 @@ const createDataSnapshot = (chart: Chart) => {
     });
 }
 
-const detectAppendScenario = (chart: Chart, lastSnapshot: string) => {
-    try {
-        const oldData = JSON.parse(lastSnapshot);
-        const newData = {
-            datasets: chart.data.datasets.map(ds => ({
-                data: ds.data,
-                label: ds.label
-            })),
-            labels: chart.data.labels
-        };
-
-        // Check if same number of datasets
-        if(oldData.datasets.length !== newData.datasets.length){
-            return null; // Not a simple append
-        }
-
-        // Check if only one dataset changed
-        const changedDatasets: number[] = [];
-        for(let i = 0; i < oldData.datasets.length; i++){
-            if(oldData.datasets[i].data.length !== newData.datasets[i].data.length){
-                changedDatasets.push(i);
-            }
-        }
-
-        // Only handle single dataset append for now
-        if(changedDatasets.length !== 1){
-            return null; // Multiple datasets changed or no change
-        }
-
-        const datasetIndex = changedDatasets[0];
-        const oldDataset = oldData.datasets[datasetIndex];
-        const newDataset = newData.datasets[datasetIndex];
-
-        // Check if new data is longer (append, not replace)
-        if(newDataset.data.length <= oldDataset.data.length){
-            return null; // Not an append
-        }
-
-        // Check if old data is unchanged (pure append)
-        const oldLength = oldDataset.data.length;
-        const oldDataStr = JSON.stringify(oldDataset.data.slice(0, oldLength));
-        const newDataStr = JSON.stringify(newDataset.data.slice(0, oldLength));
-
-        if(oldDataStr !== newDataStr){
-            return null; // Old data changed, not a pure append
-        }
-
-        // Check if labels also appended
-        const labelsAppended = (newData.labels?.length ?? 0) > (oldData.labels?.length ?? 0);
-        if(labelsAppended){
-            const oldLabelLen = oldData.labels?.length ?? 0;
-            const oldLabelsStr = JSON.stringify(oldData.labels?.slice(0, oldLabelLen) ?? []);
-            const newLabelsStr = JSON.stringify(newData.labels?.slice(0, oldLabelLen) ?? []);
-            if(oldLabelsStr !== newLabelsStr){
-                return null; // Old labels changed
-            }
-        }
-
-        // This is a pure append scenario!
-        return {
-            datasetIndex,
-            newPoints: newDataset.data.slice(oldLength),
-            categoryName: newDataset.label,
-            oldLength
-        };
-    } catch(e){
-        return null; // Error parsing, fall back to setData
-    }
-}
 
 const displayPoint = (chart: Chart) => {
     if(!chartStates.has(chart)){
@@ -514,71 +445,7 @@ const plugin: Plugin = {
             return; // No data changes
         }
 
-        // TODO: Re-enable append optimization once Chart2Music fixes appendData to update axis valueLabels
-        // Issue: appendData() doesn't update _xAxis.valueLabels, causing keyboard navigation to miss labels for appended points
-        // Detection code preserved for future use:
-        const appendInfo = detectAppendScenario(chart, lastDataSnapshot);
-
-        //const appendInfo = null; // Temporarily disabled
-
-        if(appendInfo){
-            // Optimized path: use appendData() for streaming
-            const {newPoints, categoryName, datasetIndex, oldLength} = appendInfo;
-
-            // Determine if this is a grouped chart
-            const isGrouped = chart.data.datasets.length > 1;
-            const targetCategory = isGrouped ? categoryName : undefined;
-
-            // Process each new point and append it
-            let appendFailed = false;
-            newPoints.forEach((newPoint, idx) => {
-                if(appendFailed) return;
-
-                const pointIndex = oldLength + idx;
-
-                // Get the corresponding label from chart.data.labels if it exists
-                const pointLabel = chart.data.labels?.[pointIndex];
-
-                // Format according to Chart2Music's SimpleDataPoint interface
-                let processedPoint: any;
-                if(typeof newPoint === 'number'){
-                    processedPoint = {
-                        x: pointIndex,
-                        y: newPoint,
-                        ...(pointLabel ? { label: String(pointLabel) } : {})
-                    };
-                } else if(typeof newPoint === 'object' && newPoint !== null){
-                    processedPoint = {
-                        x: ('x' in newPoint && typeof newPoint.x === 'number') ? newPoint.x : pointIndex,
-                        y: ('y' in newPoint) ? newPoint.y : newPoint,
-                        ...(pointLabel ? { label: String(pointLabel) } : {})
-                    };
-                } else {
-                    processedPoint = newPoint;
-                }
-
-                // Use appendData for efficient streaming
-                const {err} = ref.appendData(processedPoint, targetCategory);
-
-                if(err){
-                    console.error(`[Chart2Music] appendData failed:`, err);
-                    // @ts-ignore
-                    options.errorCallback?.(err);
-                    appendFailed = true;
-                }
-            });
-
-            if(appendFailed){
-                // Fall back to full setData update
-                state.lastDataSnapshot = lastDataSnapshot; // Reset to trigger full update below
-            } else {
-                // Update snapshot after successful append
-                state.lastDataSnapshot = currentSnapshot;
-                return;
-            }
-        }
-
-        // Data has changed - use setData() for all updates
+        // Data has changed - use setData() to update Chart2Music
         const {valid, c2m_types} = processChartType(chart);
         if(!valid){
             return;
