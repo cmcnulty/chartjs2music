@@ -278,14 +278,22 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         if(isNaN(c2mOptions.data[0])){
             c2mOptions.data = c2mOptions.data.map((point, index) => {
                 return {
-                    ...point
+                    ...point,
+                    custom: {
+                        group: 0,
+                        index
+                    }
                 }
             })
         }else{
             c2mOptions.data = c2mOptions.data.map((num, index) => {
                 return {
                     x: index,
-                    y: num
+                    y: num,
+                    custom: {
+                        group: 0,
+                        index
+                    }
                 }
             })
         }
@@ -296,13 +304,21 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
                 c2mOptions.data[groupName] = c2mOptions.data[groupName].map((num: number, index: number) => {
                     return {
                         x: index,
-                        y: num
+                        y: num,
+                        custom: {
+                            group: groupNumber,
+                            index
+                        }
                     }
                 })
             }else{
                 c2mOptions.data[groupName] = c2mOptions.data[groupName].map((point: any, index: number) => {
                     return {
-                        ...point
+                        ...point,
+                        custom: {
+                            group: groupNumber,
+                            index
+                        }
                     }
                 })
             }
@@ -495,31 +511,58 @@ const plugin: Plugin = {
 
         let processedData = scrub?.data ?? data;
 
-        // Keep data in native Chart2Music format without custom metadata
+        // Add custom metadata for Chart2Music
         if(Array.isArray(processedData)){
             if(!isNaN(processedData[0])){
                 // Convert simple numbers to x/y format
                 processedData = processedData.map((num, index) => {
                     return {
                         x: index,
-                        y: num
+                        y: num,
+                        custom: {
+                            group: 0,
+                            index
+                        }
+                    }
+                })
+            }else{
+                // Add custom metadata to existing objects
+                processedData = processedData.map((point, index) => {
+                    return {
+                        ...point,
+                        custom: {
+                            group: 0,
+                            index
+                        }
                     }
                 })
             }
-            // Already in correct format if isNaN(processedData[0])
         }else{
             // Handle grouped data
             const dataGroups = Object.keys(processedData);
-            dataGroups.forEach((groupName) => {
+            dataGroups.forEach((groupName, groupNumber) => {
                 if(!isNaN(processedData[groupName][0])){
                     processedData[groupName] = processedData[groupName].map((num: number, index: number) => {
                         return {
                             x: index,
-                            y: num
+                            y: num,
+                            custom: {
+                                group: groupNumber,
+                                index
+                            }
+                        }
+                    })
+                }else{
+                    processedData[groupName] = processedData[groupName].map((point: any, index: number) => {
+                        return {
+                            ...point,
+                            custom: {
+                                group: groupNumber,
+                                index
+                            }
                         }
                     })
                 }
-                // Already in correct format if isNaN
             });
         }
 
