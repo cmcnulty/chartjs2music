@@ -370,7 +370,8 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
 
     chartStates.set(chart, {
         c2m,
-        visible_groups: groups?.map((g, i) => i) ?? [0], // Default to [0] for single dataset charts
+        // Initialize visible_groups respecting Chart.js's current visibility state
+        visible_groups: (groups?.map((g, i) => i) ?? [0]).filter(i => !chart.getDatasetMeta(i).hidden),
         lastDataSnapshot: createDataSnapshot(chart)
     });
 
@@ -576,9 +577,11 @@ const plugin: Plugin = {
         // Update the snapshot after successful update
         state.lastDataSnapshot = currentSnapshot;
 
-        // Update visible groups if groups changed
+        // Update visible groups if groups changed, respecting Chart.js visibility
         if(groups){
-            state.visible_groups = groups.map((g, i) => i);
+            state.visible_groups = groups
+                .map((g, i) => i)
+                .filter(i => !chart.getDatasetMeta(i).hidden);
         }
     },
 
