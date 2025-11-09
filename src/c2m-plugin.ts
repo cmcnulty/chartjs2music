@@ -90,6 +90,14 @@ const generateAxes = (chart: any) => {
     const xAxisValueLabels = chart.data.labels.slice(0);
     if(xAxisValueLabels.length > 0){
         axes.x.valueLabels = xAxisValueLabels;
+
+        // For categorical axes, always use full data range (0 to labels.length - 1)
+        // Chart.js min/max are display hints (which ticks to show), not data indices
+        // Chart2Music needs actual data indices for navigation
+        if(chart.options?.scales?.x?.type === 'category'){
+            axes.x.minimum = 0;
+            axes.x.maximum = xAxisValueLabels.length - 1;
+        }
     }
 
     return axes;

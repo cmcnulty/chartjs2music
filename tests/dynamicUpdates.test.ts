@@ -203,4 +203,70 @@ describe("Dynamic Data Updates", () => {
 
         chart.destroy();
     });
+
+    test("Data updates use correct axis bounds for categorical x-axis", () => {
+        const mockElement = document.createElement("canvas");
+        const mockAudioEngine = new MockAudioEngine();
+
+        // Create chart with 19 labels (ages 47-65)
+        const labels = [];
+        for(let age = 47; age <= 65; age++) {
+            labels.push(`Age ${age}`);
+        }
+
+        const chart = new Chart(mockElement, {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: "Income",
+                    data: Array(19).fill(0).map((_, i) => 20000 + i * 1000)
+                }]
+            },
+            options: {
+                animation: false,
+                scales: {
+                    x: { type: 'category' },
+                    y: { type: 'linear' }
+                },
+                plugins: {
+                    chartjs2music: {
+                        audioEngine: mockAudioEngine
+                    }
+                }
+            }
+        });
+
+        // Wait for chart to initialize
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        // Get chart2music instance
+        const state = chartStates.get(chart);
+        expect(state).toBeDefined();
+        const c2mInstance = state!.c2m;
+
+        // Spy on setData to see what axes values are passed
+        const setDataSpy = jest.spyOn(c2mInstance, 'setData');
+
+        // Update data values
+        chart.data.datasets[0].data = Array(19).fill(0).map((_, i) => 30000 + i * 1500);
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        // THE BUG: setData should be called with axes.x.maximum = 18 (labels.length - 1)
+        // Without the fix, it might get a wrong value from Chart.js scale config
+        expect(setDataSpy).toHaveBeenCalled();
+
+        const lastCall = setDataSpy.mock.calls[setDataSpy.mock.calls.length - 1];
+        const axes = lastCall[1]; // Second argument to setData is axes
+
+        // For categorical axis with 19 labels, Chart2Music needs:
+        // minimum: 0 (first index)
+        // maximum: 18 (last index)
+        expect(axes.x.minimum).toBe(0);
+        expect(axes.x.maximum).toBe(18);
+
+        chart.destroy();
+    });
 });
