@@ -8,7 +8,7 @@ import {
     LinearScale,
     BarElement,
 } from "chart.js";
-import plugin from "../src/c2m-plugin";
+import plugin, { chartStates } from "../src/c2m-plugin";
 
 Chart.register(
     plugin,
@@ -134,5 +134,73 @@ describe("Dynamic Data Updates", () => {
             chart.data.datasets[0].data.push(20);
             chart.update();
         }).not.toThrow();
+    });
+
+    test("Data updates preserve dataset visibility in chart2music", () => {
+        const mockElement = document.createElement("canvas");
+        const mockAudioEngine = new MockAudioEngine();
+
+        const chart = new Chart(mockElement, {
+            type: "bar",
+            data: {
+                labels: ["A", "B"],
+                datasets: [
+                    {
+                        label: "Dataset 1",
+                        data: [100, 110]
+                    },
+                    {
+                        label: "Dataset 2",
+                        data: [50, 55]
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                scales: {
+                    x: { type: 'category', stacked: true },
+                    y: { type: 'linear', stacked: true }
+                },
+                plugins: {
+                    chartjs2music: {
+                        audioEngine: mockAudioEngine
+                    }
+                }
+            }
+        });
+
+        // Wait for chart to initialize
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        // Get chart2music instance
+        const state = chartStates.get(chart);
+        expect(state).toBeDefined();
+        const c2mInstance = state!.c2m;
+
+        // Hide Dataset 2
+        chart.setDatasetVisibility(1, false);
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        // Update data values (like toggling annual/monthly in wrs-chart)
+        // This simulates what happens when user toggles annual/monthly display
+        chart.data.datasets[0].data = [200, 220];
+        chart.data.datasets[1].data = [100, 110];
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        // Check the current point value (Chart2Music starts at index 0)
+        const current = c2mInstance.getCurrent();
+
+        // THE BUG: Without the fix, the "All" group value will be 300 (200 + 100)
+        // because setData() updated the values but didn't sync visibility,
+        // so Chart2Music thinks Dataset 2 is still visible.
+        // With the fix, "All" should only be 200 (just Dataset 1, excluding hidden Dataset 2)
+        expect(current.group).toBe("All");
+        // @ts-ignore - accessing y value from point
+        expect(current.point.y).toBe(200); // Should only include visible Dataset 1, not hidden Dataset 2
+
+        chart.destroy();
     });
 });

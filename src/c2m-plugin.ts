@@ -8,7 +8,7 @@ type ChartStatesTypes = {
     lastDataSnapshot: string;
 }
 
-const chartStates = new Map<Chart, ChartStatesTypes>();
+export const chartStates = new Map<Chart, ChartStatesTypes>();
 
 const chartjs_c2m_converter: any = {
     bar: "bar",
@@ -577,8 +577,24 @@ const plugin: Plugin = {
         // Update the snapshot after successful update
         state.lastDataSnapshot = currentSnapshot;
 
-        // Update visible groups if groups changed, respecting Chart.js visibility
+        // Sync dataset visibility from Chart.js to Chart2Music
+        // setData() doesn't preserve visibility state, so we must re-sync it
         if(groups){
+            // Get Chart2Music's internal groups (similar to afterDatasetUpdate)
+            // @ts-ignore
+            const c2mGroups = ref._groups.slice(0);
+            // @ts-ignore
+            if(ref._options.stack && c2mGroups[0] === "All"){
+                c2mGroups.shift(); // Remove "All" group for stacked charts
+            }
+
+            // Sync visibility for each dataset/group
+            c2mGroups.forEach((groupName: string, i: number) => {
+                const isVisible = !chart.getDatasetMeta(i).hidden;
+                ref.setCategoryVisibility(groupName, isVisible);
+            });
+
+            // Update visible groups tracking
             state.visible_groups = groups
                 .map((g, i) => i)
                 .filter(i => !chart.getDatasetMeta(i).hidden);
