@@ -91,12 +91,17 @@ const generateAxes = (chart: any) => {
     if(xAxisValueLabels.length > 0){
         axes.x.valueLabels = xAxisValueLabels;
 
-        // For categorical axes, always use full data range (0 to labels.length - 1)
+        // For categorical axes, use full data range (0 to labels.length - 1) if not explicitly set
         // Chart.js min/max are display hints (which ticks to show), not data indices
         // Chart2Music needs actual data indices for navigation
         if(chart.options?.scales?.x?.type === 'category'){
-            axes.x.minimum = 0;
-            axes.x.maximum = xAxisValueLabels.length - 1;
+            // Only set if user didn't explicitly provide min/max
+            if(axes.x.minimum === undefined){
+                axes.x.minimum = 0;
+            }
+            if(axes.x.maximum === undefined){
+                axes.x.maximum = xAxisValueLabels.length - 1;
+            }
         }
     }
 
