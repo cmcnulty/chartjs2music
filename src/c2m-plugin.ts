@@ -6,6 +6,7 @@ type ChartStatesTypes = {
     c2m: c2m;
     visible_groups: number[];
     lastDataSnapshot: string;
+    scalesSynced: boolean; // Track if we've updated axes with computed scales
 }
 
 export const chartStates = new Map<Chart, ChartStatesTypes>();
@@ -86,6 +87,23 @@ const generateAxes = (chart: any) => {
             ...generateAxisInfo(chart.options?.scales?.y, chart),
         }
     };
+
+    // Use Chart.js's computed scale values if not explicitly set in options
+    // This is crucial for stacked charts where Chart.js auto-calculates the range
+    // Without this, Chart2Music calculates its own range from individual dataset values
+    // which gives wrong results (e.g., min from individual datasets instead of stacked totals)
+    if(chart.scales?.y && axes.y.minimum === undefined){
+        axes.y.minimum = chart.scales.y.min;
+    }
+    if(chart.scales?.y && axes.y.maximum === undefined){
+        axes.y.maximum = chart.scales.y.max;
+    }
+    if(chart.scales?.x && axes.x.minimum === undefined){
+        axes.x.minimum = chart.scales.x.min;
+    }
+    if(chart.scales?.x && axes.x.maximum === undefined){
+        axes.x.maximum = chart.scales.x.max;
+    }
 
     const xAxisValueLabels = chart.data.labels.slice(0);
     if(xAxisValueLabels.length > 0){
@@ -372,7 +390,8 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         c2m,
         // Initialize visible_groups respecting Chart.js's current visibility state
         visible_groups: (groups?.map((g, i) => i) ?? [0]).filter(i => !chart.getDatasetMeta(i).hidden),
-        lastDataSnapshot: createDataSnapshot(chart)
+        lastDataSnapshot: createDataSnapshot(chart),
+        scalesSynced: false // Scales aren't available yet in afterInit
     });
 
 }
@@ -450,16 +469,42 @@ const plugin: Plugin = {
         }
 
         const state = chartStates.get(chart) as ChartStatesTypes;
-        const {c2m: ref, lastDataSnapshot} = state;
+        const {c2m: ref, lastDataSnapshot, scalesSynced} = state;
 
         if(!ref){
             return;
         }
 
+        // Check if we need to sync scales now that they're available
+        const needsScaleSync = !scalesSynced && chart.scales?.y;
+
         // Check if data has changed
         const currentSnapshot = createDataSnapshot(chart);
-        if(currentSnapshot === lastDataSnapshot){
-            return; // No data changes
+        const dataChanged = currentSnapshot !== lastDataSnapshot;
+
+        if(!dataChanged && !needsScaleSync){
+            return; // No data changes and scales already synced
+        }
+
+        // If we only need to sync scales (no data change), update Chart2Music's axes directly
+        // to avoid announcing "Chart updated" when data hasn't actually changed
+        if(needsScaleSync && !dataChanged){
+            const axes = generateAxes(chart);
+            // @ts-ignore - accessing Chart2Music internals to update axes without triggering update announcement
+            if(axes.y.minimum !== undefined){
+                ref._yAxis.minimum = axes.y.minimum;
+            }
+            if(axes.y.maximum !== undefined){
+                ref._yAxis.maximum = axes.y.maximum;
+            }
+            if(axes.x.minimum !== undefined){
+                ref._xAxis.minimum = axes.x.minimum;
+            }
+            if(axes.x.maximum !== undefined){
+                ref._xAxis.maximum = axes.x.maximum;
+            }
+            state.scalesSynced = true;
+            return;
         }
 
         // Data has changed - use setData() to update Chart2Music
@@ -576,6 +621,8 @@ const plugin: Plugin = {
 
         // Update the snapshot after successful update
         state.lastDataSnapshot = currentSnapshot;
+        // Mark that we've synced scales (they're now in the axes we just passed to setData)
+        state.scalesSynced = true;
 
         // Sync dataset visibility from Chart.js to Chart2Music
         // setData() doesn't preserve visibility state, so we must re-sync it

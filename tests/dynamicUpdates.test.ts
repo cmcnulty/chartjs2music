@@ -203,4 +203,87 @@ describe("Dynamic Data Updates", () => {
 
         chart.destroy();
     });
+
+    test("Debug: What data does Chart2Music receive for stacked charts?", () => {
+        const mockElement = document.createElement("canvas");
+        const mockAudioEngine = new MockAudioEngine();
+
+        const chart = new Chart(mockElement, {
+            type: "bar",
+            data: {
+                labels: ["A", "B", "C"],
+                datasets: [
+                    {
+                        label: "Dataset 1",
+                        data: [10, 15, 20]
+                    },
+                    {
+                        label: "Dataset 2",
+                        data: [20, 25, 30]
+                    },
+                    {
+                        label: "Dataset 3",
+                        data: [30, 35, 40]
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                scales: {
+                    x: { type: 'category', stacked: true },
+                    y: { type: 'linear', stacked: true }
+                },
+                plugins: {
+                    chartjs2music: {
+                        audioEngine: mockAudioEngine
+                    }
+                }
+            }
+        });
+
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        const state = chartStates.get(chart);
+        const c2mInstance = state!.c2m;
+
+        // @ts-ignore - access Chart2Music internals
+        console.log("Chart2Music groups:", c2mInstance._groups);
+        // @ts-ignore
+        console.log("Chart2Music data (by index):");
+        // @ts-ignore
+        c2mInstance._groups.forEach((groupName, idx) => {
+            // @ts-ignore
+            console.log(`  [${idx}] ${groupName}:`, c2mInstance._data[idx]?.[0], c2mInstance._data[idx]?.[1], c2mInstance._data[idx]?.[2]);
+        });
+        // @ts-ignore
+        console.log("Chart2Music Y axis:", c2mInstance._yAxis);
+        console.log("Chart.js computed Y scale:", chart.scales.y.min, "to", chart.scales.y.max);
+
+        console.log("\n--- Now hiding Dataset 2 (Chart.js dataset index 1) ---");
+
+        // Spy on console.error to see if setCategoryVisibility returns an error
+        const errorSpy = jest.spyOn(console, 'error');
+
+        chart.setDatasetVisibility(1, false);
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        console.log("setCategoryVisibility errors:", errorSpy.mock.calls);
+        errorSpy.mockRestore();
+
+        // @ts-ignore
+        console.log("After hiding - Chart2Music data (by index):");
+        // @ts-ignore
+        c2mInstance._groups.forEach((groupName, idx) => {
+            // @ts-ignore
+            console.log(`  [${idx}] ${groupName}:`, c2mInstance._data[idx]?.[0], c2mInstance._data[idx]?.[1], c2mInstance._data[idx]?.[2]);
+        });
+        // @ts-ignore
+        console.log("After hiding - Chart2Music Y axis:", c2mInstance._yAxis);
+        // @ts-ignore
+        console.log("After hiding - visible group indices:", c2mInstance._visible_group_indices);
+
+        chart.destroy();
+    });
 });
