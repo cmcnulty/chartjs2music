@@ -204,6 +204,84 @@ describe("Dynamic Data Updates", () => {
         chart.destroy();
     });
 
+    test("Axes update when showing initially hidden dataset", () => {
+        const mockElement = document.createElement("canvas");
+        const mockAudioEngine = new MockAudioEngine();
+
+        const chart = new Chart(mockElement, {
+            type: "bar",
+            data: {
+                labels: ["A", "B", "C"],
+                datasets: [
+                    {
+                        label: "Dataset 1",
+                        data: [10, 15, 20]
+                    },
+                    {
+                        label: "Dataset 2",
+                        data: [20, 25, 30]
+                    },
+                    {
+                        label: "Dataset 3",
+                        data: [30, 35, 40]
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                scales: {
+                    x: { type: 'category', stacked: true },
+                    y: { type: 'linear', stacked: true }
+                },
+                plugins: {
+                    chartjs2music: {
+                        audioEngine: mockAudioEngine
+                    }
+                }
+            }
+        });
+
+        // Let chart initialize first
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        const state = chartStates.get(chart);
+        const c2mInstance = state!.c2m;
+
+        console.log("After init - all visible - Chart.js Y scale:", chart.scales.y.min, "to", chart.scales.y.max);
+        console.log("Dataset 1 visible?", chart.isDatasetVisible(0));
+        console.log("Dataset 2 visible?", chart.isDatasetVisible(1));
+        console.log("Dataset 3 visible?", chart.isDatasetVisible(2));
+
+        // Now hide Dataset 2
+        chart.setDatasetVisibility(1, false);
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        console.log("After hide - Dataset 2 hidden - Dataset 2 visible?", chart.isDatasetVisible(1));
+
+        // Check state after hiding: Dataset 2 is hidden, so Y axis should be 0 to 60 (10+30 at index 2)
+        // @ts-ignore
+        console.log("After hide - Chart2Music Y axis:", c2mInstance._yAxis.minimum, "to", c2mInstance._yAxis.maximum);
+        console.log("After hide - Chart.js computed Y scale:", chart.scales.y.min, "to", chart.scales.y.max);
+        // @ts-ignore
+        expect(c2mInstance._yAxis.maximum).toBe(60);
+
+        // Now show Dataset 2
+        chart.setDatasetVisibility(1, true);
+        chart.update();
+        jest.advanceTimersByTime(250);
+
+        // After showing: Y axis should be 0 to 90 (10+20+30 at index 2)
+        // @ts-ignore
+        console.log("After show - Chart2Music Y axis:", c2mInstance._yAxis.minimum, "to", c2mInstance._yAxis.maximum);
+        console.log("After show - Chart.js computed Y scale:", chart.scales.y.min, "to", chart.scales.y.max);
+        // @ts-ignore
+        expect(c2mInstance._yAxis.maximum).toBe(90);
+
+        chart.destroy();
+    });
+
     test("Debug: What data does Chart2Music receive for stacked charts?", () => {
         const mockElement = document.createElement("canvas");
         const mockAudioEngine = new MockAudioEngine();

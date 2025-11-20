@@ -190,9 +190,10 @@ const determineCCElement = (canvas: HTMLCanvasElement, provided: HTMLElement | n
 
 const createDataSnapshot = (chart: Chart) => {
     return JSON.stringify({
-        datasets: chart.data.datasets.map(ds => ({
+        datasets: chart.data.datasets.map((ds, i) => ({
             data: ds.data,
-            label: ds.label
+            label: ds.label,
+            visible: chart.isDatasetVisible(i) // Track visibility to detect changes
         })),
         labels: chart.data.labels
     });
@@ -610,6 +611,42 @@ const plugin: Plugin = {
                     })
                 }
             });
+        }
+
+        // For stacked charts, recalculate axis range from the actual visible data
+        // Chart.js keeps scales fixed for visual stability, but Chart2Music needs dynamic range for audio
+        if(chart.options?.scales?.y?.stacked && groups && groups.length > 0 && !Array.isArray(processedData)){
+            // Calculate stacked totals from visible datasets only
+            const groupNames = Object.keys(processedData);
+            // Filter to only visible datasets
+            const visibleGroupNames = groupNames.filter((_, index) => chart.isDatasetVisible(index));
+            const numPoints = processedData[groupNames[0]]?.length || 0;
+
+            if(numPoints > 0 && visibleGroupNames.length > 0){
+                const stackedTotals: number[] = [];
+                for(let i = 0; i < numPoints; i++){
+                    let total = 0;
+                    visibleGroupNames.forEach(groupName => {
+                        const point = processedData[groupName][i];
+                        if(point && point.y !== undefined && !isNaN(point.y)){
+                            total += point.y;
+                        }
+                    });
+                    stackedTotals.push(total);
+                }
+
+                if(stackedTotals.length > 0){
+                    const computedMin = Math.min(...stackedTotals);
+                    const computedMax = Math.max(...stackedTotals);
+                    // Only override if user hasn't set explicit min/max
+                    if(chart.options?.scales?.y?.min === undefined){
+                        axes.y.minimum = computedMin;
+                    }
+                    if(chart.options?.scales?.y?.max === undefined){
+                        axes.y.maximum = computedMax;
+                    }
+                }
+            }
         }
 
         // Preserve user's current position if possible
