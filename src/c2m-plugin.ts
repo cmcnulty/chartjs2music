@@ -464,9 +464,12 @@ const plugin: Plugin = {
             // Check if chart now has data
             if(chart.data.datasets.length > 0 && chart.data.datasets[0].data.length > 0){
                 generateChart(chart, options);
+                // After initialization, continue to sync scales (don't return early)
+                // Fall through to scale sync below
+            } else {
+                // Still no data, nothing to do
+                return;
             }
-            // Whether we initialized or not, we're done for this update
-            return;
         }
 
         const state = chartStates.get(chart) as ChartStatesTypes;
