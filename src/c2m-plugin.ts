@@ -205,6 +205,9 @@ const displayPoint = (chart: Chart) => {
         return;
     }
     const {c2m: ref, visible_groups} = chartStates.get(chart) as ChartStatesTypes;
+    if(!ref){
+        return; // Chart2Music not initialized yet (chart is empty)
+    }
     const {index} = ref.getCurrent();
     try{
         // Use Chart2Music's index directly to highlight corresponding Chart.js points
@@ -357,17 +360,20 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
     }
 
     // Check if data is empty (for both arrays and objects with groups)
-    if(Array.isArray(c2mOptions.data)){
-        if(c2mOptions.data.length === 0){
-            return;
-        }
-    }else{
-        // For grouped data (multiple datasets), check if all groups are empty
-        const groups = Object.keys(c2mOptions.data);
-        const hasData = groups.some(group => c2mOptions.data[group].length > 0);
-        if(!hasData){
-            return;
-        }
+    const isEmpty = Array.isArray(c2mOptions.data)
+        ? c2mOptions.data.length === 0
+        : !Object.keys(c2mOptions.data).some(group => c2mOptions.data[group].length > 0);
+
+    if(isEmpty){
+        // Don't initialize Chart2Music yet (needs data), but save a snapshot
+        // so that when data is populated, afterUpdate will detect the change
+        chartStates.set(chart, {
+            c2m: null as any, // Will be initialized when data is available
+            visible_groups: [],
+            lastDataSnapshot: createDataSnapshot(chart),
+            scalesSynced: false
+        });
+        return;
     }
 
     if(options.lang){
@@ -459,15 +465,13 @@ const plugin: Plugin = {
     },
 
     afterUpdate: (chart: Chart, args, options) => {
-        // If chart wasn't initialized (e.g., started empty), try to initialize now
+        // If chart state doesn't exist yet, initialize with empty snapshot
         if(!chartStates.has(chart)){
             // Check if chart now has data
             if(chart.data.datasets.length > 0 && chart.data.datasets[0].data.length > 0){
                 generateChart(chart, options);
-                // After initialization, continue to sync scales (don't return early)
-                // Fall through to scale sync below
             } else {
-                // Still no data, nothing to do
+                // Still no data, create empty state to track future changes
                 return;
             }
         }
@@ -475,16 +479,33 @@ const plugin: Plugin = {
         const state = chartStates.get(chart) as ChartStatesTypes;
         const {c2m: ref, lastDataSnapshot, scalesSynced} = state;
 
+        // If Chart2Music wasn't initialized yet (chart started empty), initialize now
         if(!ref){
-            return;
+            // Check if chart now has data
+            if(chart.data.datasets.length > 0 && chart.data.datasets[0].data.length > 0){
+                generateChart(chart, options);
+                // Re-get state after initialization
+                const newState = chartStates.get(chart) as ChartStatesTypes;
+                if(!newState?.c2m){
+                    return; // Initialization failed
+                }
+                // Continue to normal update flow below
+            } else {
+                // Still no data
+                return;
+            }
         }
 
+        // Re-get state in case it was just initialized
+        const updatedState = chartStates.get(chart) as ChartStatesTypes;
+        const {c2m: updatedRef, lastDataSnapshot: updatedSnapshot, scalesSynced: updatedScalesSynced} = updatedState;
+
         // Check if we need to sync scales now that they're available
-        const needsScaleSync = !scalesSynced && chart.scales?.y;
+        const needsScaleSync = !updatedScalesSynced && chart.scales?.y;
 
         // Check if data has changed
         const currentSnapshot = createDataSnapshot(chart);
-        const dataChanged = currentSnapshot !== lastDataSnapshot;
+        const dataChanged = currentSnapshot !== updatedSnapshot;
 
         if(!dataChanged && !needsScaleSync){
             return; // No data changes and scales already synced
@@ -496,18 +517,18 @@ const plugin: Plugin = {
             const axes = generateAxes(chart);
             // @ts-ignore - accessing Chart2Music internals to update axes without triggering update announcement
             if(axes.y.minimum !== undefined){
-                ref._yAxis.minimum = axes.y.minimum;
+                updatedRef._yAxis.minimum = axes.y.minimum;
             }
             if(axes.y.maximum !== undefined){
-                ref._yAxis.maximum = axes.y.maximum;
+                updatedRef._yAxis.maximum = axes.y.maximum;
             }
             if(axes.x.minimum !== undefined){
-                ref._xAxis.minimum = axes.x.minimum;
+                updatedRef._xAxis.minimum = axes.x.minimum;
             }
             if(axes.x.maximum !== undefined){
-                ref._xAxis.maximum = axes.x.maximum;
+                updatedRef._xAxis.maximum = axes.x.maximum;
             }
-            state.scalesSynced = true;
+            updatedState.scalesSynced = true;
             return;
         }
 
