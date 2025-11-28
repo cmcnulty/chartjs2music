@@ -425,8 +425,20 @@ const plugin: Plugin = {
         }
     },
 
-    afterUpdate: (chart: Chart, args, options) => {
-        console.log("afterUpdate: not implemented");
+    afterDatasetsUpdate: (chart: Chart, args, options) => {
+        const state = chartStates.get(chart);
+        if(!state?.c2m) return;
+
+        // Get chart type
+        const {valid, c2m_types} = processChartType(chart);
+        if(!valid) return;
+
+        // Process data and generate axes
+        const {data} = processData(chart.data, c2m_types);
+        const axes = generateAxes(chart);
+
+        // Update Chart2Music with new data
+        state.c2m.setData(data, axes);
     },
 
     afterDestroy: (chart) => {
