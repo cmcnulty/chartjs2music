@@ -68,7 +68,9 @@
     "vite": "6.3.5"
   },
   "dependencies": {
-    "chart.js": "4.5.1",
-    "chart2music": "1.19.0"
+    "chart.js": "4.5.1"
+  },
+  "peerDependencies": {
+    "chart2music": "*"
   }
 }

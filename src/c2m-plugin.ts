@@ -7,7 +7,7 @@ type ChartStatesTypes = {
     visible_groups: number[];
 }
 
-const chartStates = new Map<Chart, ChartStatesTypes>();
+export const chartStates = new Map<Chart, ChartStatesTypes>();
 
 const chartjs_c2m_converter: any = {
     bar: "bar",
@@ -142,7 +142,7 @@ const processData = (data: any, c2m_types: string) => {
     data.datasets.forEach((obj: any, index: number) => {
         const groupName = obj.label ?? `Group ${index+1}`;
         groups.push(groupName);
-        
+
         result[groupName] = whichDataStructure(obj.data);
     });
 
@@ -235,7 +235,7 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
     if(scrub?.labels && scrub?.labels?.length > 0){   // Something was scrubbed
         if(!chart.data.labels || chart.data.labels.length === 0){
             axes.x.valueLabels = scrub.labels.slice(0);
-        }    
+        }
     }
 
     if(c2m_types === "scatter"){
@@ -420,6 +420,10 @@ const plugin: Plugin = {
             if(err){console.error(err)}
             return;
         }
+    },
+
+    afterUpdate: (chart: Chart, args, options) => {
+        console.log("afterUpdate: not implemented");
     },
 
     afterDestroy: (chart) => {
