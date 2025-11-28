@@ -4,6 +4,7 @@ import {processBoxData} from "./boxplots";
 
 type ChartStatesTypes = {
     c2m: c2m;
+    lastDataSnapshot: string;
 }
 
 export const chartStates = new Map<Chart, ChartStatesTypes>();
@@ -166,6 +167,13 @@ const determineCCElement = (canvas: HTMLCanvasElement, provided: HTMLElement | n
     const cc = document.createElement("div");
     canvas.insertAdjacentElement("afterend", cc);
     return cc;
+}
+
+const createDataSnapshot = (chart: Chart) => {
+    return JSON.stringify({
+        datasets: chart.data.datasets.map(ds => ds.data),
+        labels: chart.data.labels
+    });
 }
 
 const displayPoint = (chart: Chart) => {
@@ -361,7 +369,8 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
     }
 
     chartStates.set(chart, {
-        c2m
+        c2m,
+        lastDataSnapshot: createDataSnapshot(chart)
     });
 
 }
@@ -429,6 +438,12 @@ const plugin: Plugin = {
         const state = chartStates.get(chart);
         if(!state?.c2m) return;
 
+        // Check if data has changed
+        const currentSnapshot = createDataSnapshot(chart);
+        if(currentSnapshot === state.lastDataSnapshot) {
+            return; // No data change, skip update
+        }
+
         // Get chart type
         const {valid, c2m_types} = processChartType(chart);
         if(!valid) return;
@@ -439,6 +454,9 @@ const plugin: Plugin = {
 
         // Update Chart2Music with new data
         state.c2m.setData(data, axes);
+
+        // Update snapshot
+        state.lastDataSnapshot = currentSnapshot;
     },
 
     afterDestroy: (chart) => {
