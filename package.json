@@ -40,7 +40,8 @@
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "depcheck": "depcheck",
     "clean": "rimraf dist coverage",
-    "prepack": "npm run clean && npm run build"
+    "prepack": "npm run clean && npm run build",
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "@babel/cli": "7.27.2",
