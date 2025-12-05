@@ -261,6 +261,16 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         },
     };
 
+    // Start with plugin's internal onFocusCallback
+    const pluginOnFocusCallback = () => {
+        displayPoint(chart);
+    };
+
+    // Merge user's c2mOptions, wrapping onFocusCallback if provided
+    // @ts-ignore
+    const userC2mOptions = options.c2mOptions || {};
+    const userOnFocusCallback = userC2mOptions.onFocusCallback;
+
     const c2mOptions = {
         cc,
         element: chart.canvas,
@@ -269,10 +279,14 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         title: determineChartTitle(chart.options),
         axes,
         options: {
+            ...userC2mOptions,
             // @ts-ignore
-            onFocusCallback: () => {
-                displayPoint(chart);
-            }
+            onFocusCallback: userOnFocusCallback
+                ? () => {
+                    pluginOnFocusCallback();
+                    userOnFocusCallback();
+                }
+                : pluginOnFocusCallback
         }
     };
 
@@ -437,7 +451,8 @@ const plugin: Plugin = {
     defaults: {
         cc: null,
         audioEngine: null,
-        errorCallback: null
+        errorCallback: null,
+        c2mOptions: {}
     }
 
 };
