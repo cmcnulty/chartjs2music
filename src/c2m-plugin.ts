@@ -1,5 +1,5 @@
-import type { ChartOptions, Plugin, Chart } from "chart.js";
-import c2mChart, {c2m} from "chart2music";
+import type { ChartOptions, Plugin, Chart, Point } from "chart.js";
+import c2mChart, {c2m, C2MChartConfig} from "chart2music";
 import {processBoxData} from "./boxplots";
 
 type ChartStatesTypes = {
@@ -141,7 +141,7 @@ const processData = (data: any, c2m_types: string) => {
     data.datasets.forEach((obj: any, index: number) => {
         const groupName = obj.label ?? `Group ${index+1}`;
         groups.push(groupName);
-        
+
         result[groupName] = whichDataStructure(obj.data);
     });
 
@@ -158,7 +158,7 @@ const determineChartTitle = (options: ChartOptions) => {
     return "";
 }
 
-const determineCCElement = (canvas: HTMLCanvasElement, provided: HTMLElement | null) => {
+const determineCCElement = (canvas: HTMLCanvasElement, provided?: HTMLElement) => {
     if(provided){
         return provided;
     }
@@ -199,14 +199,21 @@ const displayPoint = (chart: Chart) => {
             })
         }
         chart?.setActiveElements(highlightElements);
-        chart?.tooltip?.setActiveElements(highlightElements, {})
+        chart?.tooltip?.setActiveElements(highlightElements, {} as Point)
         chart?.update();
     }catch(e){
         // console.warn(e);
     }
 }
 
-const generateChart = (chart: Chart, options: ChartOptions) => {
+type SupportedC2MOptions = NonNullable<C2MChartConfig['options']>;
+type C2MPluginOptions = ChartOptions & C2MChartConfig & {
+    cc?: HTMLElement | null;
+    audioEngine?: any;
+    errorCallback?: (err: string) => void;
+    c2mOptions?: SupportedC2MOptions;
+}
+const generateChart = (chart: Chart, options: C2MPluginOptions) => {
     const {valid, c2m_types, invalidType} = processChartType(chart);
 
     if(!valid){
@@ -241,7 +248,7 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
     if(scrub?.labels && scrub?.labels?.length > 0){   // Something was scrubbed
         if(!chart.data.labels || chart.data.labels.length === 0){
             axes.x.valueLabels = scrub.labels.slice(0);
-        }    
+        }
     }
 
     if(c2m_types === "scatter"){
@@ -267,11 +274,10 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
     };
 
     // Merge user's c2mOptions, wrapping onFocusCallback if provided
-    // @ts-ignore
-    const userC2mOptions = options.c2mOptions || {};
+    const userC2mOptions: SupportedC2MOptions = options.c2mOptions || {} as SupportedC2MOptions;
     const userOnFocusCallback = userC2mOptions.onFocusCallback;
 
-    const c2mOptions = {
+    const c2mOptions: C2MPluginOptions = {
         cc,
         element: chart.canvas,
         type: c2m_types,
@@ -280,7 +286,6 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         axes,
         options: {
             ...userC2mOptions,
-            // @ts-ignore
             onFocusCallback: userOnFocusCallback
                 ? () => {
                     pluginOnFocusCallback();
@@ -341,15 +346,12 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         });
     }
 
-    // @ts-ignore
+
     if(chart.config.options?.scales?.x?.stacked){
-        // @ts-ignore
         c2mOptions.options.stack = true;
     }
 
-        // @ts-ignore
     if(options.audioEngine){
-        // @ts-ignore
         c2mOptions.audioEngine = options.audioEngine;
     }
 
@@ -365,7 +367,6 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
 
     /* istanbul-ignore-next */
     if(err){
-        // @ts-ignore
         options.errorCallback?.(err);
         return;
     }
@@ -383,14 +384,14 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
 const plugin: Plugin = {
     id: "chartjs2music",
 
-    afterInit: (chart: Chart, args, options) => {
+    afterInit: (chart: Chart, args, options: C2MPluginOptions) => {
         if(!chartStates.has(chart)){
             generateChart(chart, options);
 
             // Remove tooltip when the chart blurs
             chart.canvas.addEventListener("blur", () => {
                 chart.setActiveElements([]);
-                chart.tooltip?.setActiveElements([], {});
+                chart.tooltip?.setActiveElements([], {} as Point);
                 try {
                     chart.update();
                 } catch(e){
@@ -405,7 +406,7 @@ const plugin: Plugin = {
         }
     },
 
-    afterDatasetUpdate: (chart: Chart, args, options) => {
+    afterDatasetUpdate: (chart: Chart, args, options: C2MPluginOptions) => {
         if(!args.mode){
             return;
         }
