@@ -1,4 +1,4 @@
-import type { ChartOptions, Plugin, Chart, Point, CartesianScaleOptions, ChartConfiguration, ChartTypeRegistry } from "chart.js";
+import type { ChartOptions, Plugin, Chart, Point, CartesianScaleOptions } from "chart.js";
 import c2mChart, {c2m, C2MChartConfig} from "chart2music";
 import {processBoxData} from "./boxplots";
 
@@ -16,7 +16,8 @@ type ChartStatesTypes = {
     lastDataSnapshot: string;
 }
 
-export const chartStates = new Map<Chart, ChartStatesTypes>();
+// Use 'any' for Chart type in export to avoid complex generic expansion in .d.ts
+export const chartStates: Map<any, ChartStatesTypes> = new Map<Chart, ChartStatesTypes>();
 
 const chartjs_c2m_converter: any = {
     bar: "bar",
@@ -246,7 +247,7 @@ const generateChart = (chart: Chart, options: C2MPluginOptions) => {
 
     let axes = generateAxes(chart);
 
-    if((chart.config as ChartConfiguration).type === "wordCloud" as keyof ChartTypeRegistry){
+    if((chart.config as any).type === "wordCloud"){
         delete axes.x.minimum;
         delete axes.x.maximum;
         delete axes.y.minimum;
