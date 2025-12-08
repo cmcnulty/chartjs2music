@@ -225,7 +225,7 @@ const displayPoint = (chart: Chart) => {
 }
 
 type SupportedC2MOptions = NonNullable<C2MChartConfig['options']>;
-type C2MPluginOptions = {
+export type C2MPluginOptions = {
     cc?: HTMLElement | null;
     audioEngine?: any;
     errorCallback?: (err: string) => void;
