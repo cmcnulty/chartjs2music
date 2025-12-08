@@ -1,5 +1,4 @@
 import typescript from "@rollup/plugin-typescript";
-import copy from "rollup-plugin-copy";
 
 export default [
     {
@@ -24,11 +23,10 @@ export default [
             }
         ],
         plugins: [
-            typescript({tsconfig: "./tsconfig.json"}),
-            copy({
-                targets: [
-                    {src: "src/plugin.d.ts", dest: "dist"}
-                ]
+            typescript({
+                tsconfig: "./tsconfig.json",
+                declaration: true,
+                declarationDir: "./dist"
             })
         ]
     },
