@@ -93,7 +93,7 @@ const generateAxes = (chart: any, options: C2MPluginOptions) => {
             ...generateAxisInfo(chart.options?.scales?.x, chart),
         },
         y: {
-            format: options.axes?.y?.format || ((value: number) => value.toLocaleString()),
+            format: options?.axes?.y?.format || ((value: number) => value.toLocaleString()),
             ...generateAxisInfo(chart.options?.scales?.y, chart),
         }
     };
