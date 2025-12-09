@@ -74,13 +74,13 @@ const generateAxisInfo = (chartAxisInfo: any, chart: any) => {
     return axis;
 }
 
-const generateAxes = (chart: any) => {
+const generateAxes = (chart: any, options: C2MPluginOptions) => {
     const axes = {
         x: {
             ...generateAxisInfo(chart.options?.scales?.x, chart),
         },
         y: {
-            format: (value: number) => value.toLocaleString(),
+            format: options.axes?.y?.format || ((value: number) => value.toLocaleString()),
             ...generateAxisInfo(chart.options?.scales?.y, chart),
         }
     };
@@ -141,7 +141,7 @@ const processData = (data: any, c2m_types: string) => {
     data.datasets.forEach((obj: any, index: number) => {
         const groupName = obj.label ?? `Group ${index+1}`;
         groups.push(groupName);
-        
+
         result[groupName] = whichDataStructure(obj.data);
     });
 
@@ -215,7 +215,7 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
         return;
     }
 
-    let axes = generateAxes(chart);
+    let axes = generateAxes(chart, options);
 
     if(chart.config.type === "wordCloud"){
         delete axes.x.minimum;
@@ -241,7 +241,7 @@ const generateChart = (chart: Chart, options: ChartOptions) => {
     if(scrub?.labels && scrub?.labels?.length > 0){   // Something was scrubbed
         if(!chart.data.labels || chart.data.labels.length === 0){
             axes.x.valueLabels = scrub.labels.slice(0);
-        }    
+        }
     }
 
     if(c2m_types === "scatter"){
