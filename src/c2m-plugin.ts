@@ -87,7 +87,7 @@ const generateAxisInfo = (chartAxisInfo: any, chart: any) => {
     return axis;
 }
 
-const generateAxes = (chart: any, options: C2MPluginOptions) => {
+const generateAxes = (chart: any, options?: C2MPluginOptions) => {
     const axes = {
         x: {
             ...generateAxisInfo(chart.options?.scales?.x, chart),
@@ -469,6 +469,8 @@ const plugin: Plugin = {
     afterDatasetsUpdate: (chart: Chart, args, options) => {
         const state = chartStates.get(chart);
         if(!state?.c2m) return;
+
+        if (!(state.c2m as any)._visible_group_indices?.length) return;
 
         // Check if data has changed
         const currentSnapshot = createDataSnapshot(chart);
