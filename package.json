@@ -34,6 +34,7 @@
   },
   "license": "MIT",
   "scripts": {
+    "preinstall": "node scripts/check-package-manager.cjs",
     "start": "storybook dev -p 6006",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
