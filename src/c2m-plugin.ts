@@ -23,7 +23,7 @@ type ChartStatesTypes = {
     matrixKeydownTarget?: HTMLCanvasElement;
 }
 
-const chartStates = new Map<Chart, ChartStatesTypes>();
+export const chartStates = new Map<Chart, ChartStatesTypes>();
 
 const chartjs_c2m_converter: any = {
     bar: "bar",
