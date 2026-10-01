@@ -14,7 +14,8 @@
   },
   "types": "dist/plugin.d.ts",
   "files": [
-    "dist/*"
+    "dist/*",
+    "scripts/check-package-manager.cjs"
   ],
   "keywords": [
     "a11y",
